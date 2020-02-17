@@ -289,3 +289,88 @@ matrix
 ####Did not significantly impact the model
 
 
+
+############Let's try messing with Max Depth###################
+
+
+#Default is 30, so let's try something smaller
+
+#Create a search range of 1 to 30. 
+depths = c(seq(1,30))
+
+
+
+fits = lapply(depths, function(x) {
+  rpartObj = rpart(isSpam ~ ., data = trainDF,
+                   method="class", 
+                   control = rpart.control(cp=0.0015, minsplit = 23, xval = 10, maxdepth = x) )
+  
+  predict(rpartObj, 
+          newdata = testDF[ , names(testDF) != "isSpam"],
+          type = "class")
+})
+
+errs = sapply(fits, function(preds) {
+  typeI = sum(preds[ !spam ] == "T") / numHam
+  typeII = sum(preds[ spam ] == "F") / numSpam
+  c(typeI = typeI, typeII = typeII)
+})
+
+#Plot the Type 1 and Type 2 Errors
+cols = brewer.pal(9, "Set1")[c(3, 4, 5)]
+plot(errs[1,] ~ depths, type="l", col=cols[2], 
+     lwd = 2, ylim = c(0,.6), xlim = c(0,30), 
+     ylab="Error", xlab="min split values")
+points(errs[2,] ~ depths, type="l", col=cols[1], lwd = 2)
+
+text(x =c(1, 1), y = c(0.4, 0.12), 
+     labels=c("Type II Error", "Type I Error"))
+
+minI = which(errs[1,] == min(errs[1,]))[1]
+abline(v = depths[minI], col ="grey", lty =3, lwd=2)
+
+text(depths[minI]+1, errs[1, minI]+0.01, 
+     formatC(errs[1, minI], digits = 2))
+text(depths[minI]+1, errs[2, minI]+0.01, 
+     formatC(errs[2, minI], digits = 3))
+
+
+#And get the best value for reducing the type 1 error
+
+#Find the value of the best cp from these errors
+depths[minI]
+
+#Looks like it is 0.0015 (which we could estimate off the plot)
+
+#Fit the model with this updated parameter
+rpartFit = rpart(isSpam ~ ., data = trainDF, method = "class", control = rpart.control(cp = 0.0015, minsplit = 23, xval = 10, maxdepth = 3))
+
+#plot the tree created
+rpart.plot(rpartFit, extra = 1)
+
+#make predictions on the test set
+predictions = predict(rpartFit, 
+                      newdata = testDF[, names(testDF) != "isSpam"],
+                      type = "class")
+
+#Display the confusion matrix for these values
+matrix = confusionMatrix(predictions, testDF$isSpam, positive = "T")
+matrix
+
+#This really hurt our model performance because of the high type 2 error rate. Let's try picking something that looked more reasonable
+#like a max depth of 10 that provided similar Type 1 error, but lower Type 2 error. 
+
+#Fit the model with this updated parameter
+rpartFit = rpart(isSpam ~ ., data = trainDF, method = "class", control = rpart.control(cp = 0.0015, minsplit = 23, xval = 10, maxdepth = 10))
+
+#plot the tree created
+rpart.plot(rpartFit, extra = 1)
+
+#make predictions on the test set
+predictions = predict(rpartFit, 
+                      newdata = testDF[, names(testDF) != "isSpam"],
+                      type = "class")
+
+#Display the confusion matrix for these values
+matrix = confusionMatrix(predictions, testDF$isSpam, positive = "T")
+matrix
